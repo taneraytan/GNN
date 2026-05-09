@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.gnn_outlier_app.data import load_table, numeric_columns
+from src.gnn_outlier_app.data import load_table, prepare_features
 from src.gnn_outlier_app.database import get_engine, recent_runs, save_run
 from src.gnn_outlier_app.export import attach_results, to_csv_bytes, to_excel_bytes, to_parquet_bytes
 from src.gnn_outlier_app.graph import build_knn_graph
@@ -59,26 +59,44 @@ if upload is None:
 
 loaded = load_table(upload, upload.name)
 frame = loaded.frame
-num_cols = numeric_columns(frame)
+prepared = prepare_features(frame)
 
 st.subheader("Dataset Preview")
 summary_cols = st.columns(4)
 summary_cols[0].metric("Rows", f"{len(frame):,}")
 summary_cols[1].metric("Columns", f"{len(frame.columns):,}")
-summary_cols[2].metric("Numeric Features", f"{len(num_cols):,}")
+summary_cols[2].metric("Auto Features", f"{len(prepared.feature_columns):,}")
 summary_cols[3].metric("Source", loaded.source_name)
 st.dataframe(frame.head(100), use_container_width=True)
 
-if not num_cols:
-    st.error("No numeric columns were found. Add numeric features before running graph outlier detection.")
+st.subheader("Automatic Preprocessing & Feature Selection")
+if prepared.notes:
+    for note in prepared.notes:
+        st.caption(note)
+
+prep_metrics = st.columns(3)
+prep_metrics[0].metric("Source Columns Used", f"{len(prepared.source_columns):,}")
+prep_metrics[1].metric("Model Features", f"{len(prepared.feature_columns):,}")
+prep_metrics[2].metric("Columns Dropped", f"{len(prepared.dropped_columns):,}")
+
+with st.expander("Review automatically selected features", expanded=False):
+    st.write("Feature selection is automatic: numeric, numeric-looking text, datetimes, and low-cardinality categories are cleaned, encoded, imputed, de-duplicated, and filtered before graph construction.")
+    st.dataframe(prepared.frame.head(100), use_container_width=True)
+    if prepared.dropped_columns:
+        dropped = pd.DataFrame(
+            {"column": list(prepared.dropped_columns), "reason": list(prepared.dropped_columns.values())}
+        )
+        st.dataframe(dropped, use_container_width=True)
+
+if not prepared.feature_columns:
+    st.error("Automatic preprocessing could not find usable model features in this dataset.")
     st.stop()
 
-feature_columns = st.multiselect("Feature columns", options=num_cols, default=num_cols)
-run_button = st.button("Train GNN Ensemble & Identify Outliers", type="primary")
+run_button = st.button("Preprocess, Train GNN Ensemble & Identify Outliers", type="primary")
 
 if run_button:
     with st.spinner("Building graph and training selected architectures locally..."):
-        graph = build_knn_graph(frame, feature_columns, k=k)
+        graph = build_knn_graph(prepared.frame, prepared.feature_columns, k=k)
         result = run_detection(
             graph.features,
             graph.edge_index,
@@ -95,12 +113,14 @@ if run_button:
         st.session_state["last_output"] = output
         st.session_state["last_result"] = result
         st.session_state["last_graph"] = graph
+        st.session_state["last_preparation"] = prepared
         st.session_state["last_run_id"] = run_id
 
 if "last_output" in st.session_state:
     output = st.session_state["last_output"]
     result = st.session_state["last_result"]
     graph = st.session_state["last_graph"]
+    preparation = st.session_state["last_preparation"]
     run_id = st.session_state["last_run_id"]
 
     st.success(f"Run #{run_id} completed with backend: {result.used_backend}.")
@@ -108,7 +128,7 @@ if "last_output" in st.session_state:
     metrics[0].metric("Outliers", int(result.is_outlier.sum()))
     metrics[1].metric("Threshold", f"{result.threshold:.4f}")
     metrics[2].metric("Edges", f"{graph.edge_index.shape[1]:,}")
-    metrics[3].metric("Architectures", len(result.architecture_scores))
+    metrics[3].metric("Auto Features", len(preparation.feature_columns))
 
     tab_scores, tab_map, tab_graph, tab_table, tab_export = st.tabs(["Scores", "Embedding", "Graph", "Rows", "Export"])
     with tab_scores:
