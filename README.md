@@ -6,6 +6,7 @@ GraphGuard is a professional, local-first Streamlit application for finding anom
 
 - **Local data handling:** uploaded data stays in the local Streamlit process.
 - **Broad file support:** text, CSV, Excel, and Parquet ingestion.
+- **Automatic preprocessing:** numeric-looking text, datetimes, and low-cardinality categories are converted into model-ready features without user column selection.
 - **Major GNN coverage:** GCN, GraphSAGE, GAT, GIN, ChebNet, and APPNP autoencoder variants.
 - **Professional visuals:** KPI cards, PCA embedding, score distribution, architecture agreement heatmap, and graph preview.
 - **Export options:** save all scored rows or outliers only as CSV, Excel, or Parquet.
@@ -24,8 +25,8 @@ streamlit run app.py
 ## How it works
 
 1. Upload a supported tabular file.
-2. Select numeric columns to model.
-3. The app standardizes features and constructs a symmetric kNN row graph.
+2. The app automatically preprocesses and selects usable model features by coercing numeric-looking text, expanding datetime and categorical signals, imputing missing values, removing constants and identifier-like fields, and capping engineered features by unsupervised variance.
+3. The app standardizes the prepared features and constructs a symmetric kNN row graph.
 4. Selected GNN autoencoders reconstruct node features.
 5. Reconstruction error is normalized per architecture and ensembled into an outlier score.
 6. Scores above the selected contamination quantile are flagged as outliers.

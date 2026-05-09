@@ -5,7 +5,7 @@ from io import BytesIO
 import numpy as np
 import pandas as pd
 
-from src.gnn_outlier_app.data import load_table, numeric_columns
+from src.gnn_outlier_app.data import load_table, numeric_columns, prepare_features
 from src.gnn_outlier_app.database import get_engine, recent_runs, save_run
 from src.gnn_outlier_app.export import attach_results
 from src.gnn_outlier_app.graph import build_knn_graph
@@ -19,6 +19,29 @@ def test_load_table_csv_and_numeric_columns() -> None:
     assert loaded.source_name == "sample.csv"
     assert loaded.frame.shape == (2, 3)
     assert numeric_columns(loaded.frame) == ["a", "b"]
+
+
+def test_prepare_features_automates_preprocessing_and_selection() -> None:
+    frame = pd.DataFrame(
+        {
+            "customer_id": [101, 102, 103, 104],
+            "amount": [10.0, None, 15.5, 999.0],
+            "numeric_text": ["1", "2", None, "4"],
+            "segment": ["retail", "business", "retail", "enterprise"],
+            "created_at": ["2024-01-01", "2024-01-02", "2024-01-03", None],
+            "constant": ["same", "same", "same", "same"],
+        }
+    )
+
+    prepared = prepare_features(frame)
+
+    assert "customer_id" in prepared.dropped_columns
+    assert "constant" in prepared.dropped_columns
+    assert "amount" in prepared.feature_columns
+    assert "numeric_text__numeric" in prepared.feature_columns
+    assert any(column.startswith("segment_") for column in prepared.feature_columns)
+    assert any(column.startswith("created_at__") for column in prepared.feature_columns)
+    assert prepared.frame.isna().sum().sum() == 0
 
 
 def test_build_knn_graph_is_symmetric() -> None:
