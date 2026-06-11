@@ -1,0 +1,7 @@
+# Optional GNN training backend (large download; ~2 GB for torch).
+# Lower-bounded rather than pinned because the right torch build depends on
+# your platform and CUDA version. For CPU-only:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install torch-geometric
+torch>=2.2
+torch-geometric>=2.5
