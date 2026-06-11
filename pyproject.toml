@@ -4,10 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gnn-outlier-studio"
-version = "0.1.0"
-description = "Local Streamlit app for GNN-based tabular outlier detection."
+version = "0.2.0"
+description = "Local Streamlit app and CLI for GNN-based tabular outlier detection."
 requires-python = ">=3.10"
 dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+gnn = ["torch>=2.2", "torch-geometric>=2.5"]
+
+[project.scripts]
+gnn-outlier-studio = "src.gnn_outlier_app.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "."}

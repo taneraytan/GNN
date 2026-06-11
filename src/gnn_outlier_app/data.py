@@ -127,8 +127,15 @@ def prepare_features(frame: pd.DataFrame, max_features: int = MAX_FEATURES) -> F
 
     prepared = _select_by_variance(prepared, max_features=max_features)
     if len(prepared.columns) == max_features:
-        notes.append(f"Selected the top {max_features} engineered features by unsupervised variance.")
+        notes.append(f"Selected the top {max_features} engineered features by min-max-scaled dispersion.")
     notes.append(f"Prepared {len(prepared.columns)} model-ready features from {len(source_columns)} source columns.")
+
+    duplicate_rows = int(prepared.duplicated().sum())
+    if duplicate_rows:
+        notes.append(
+            f"{duplicate_rows} rows are exact duplicates in the engineered feature space; "
+            "duplicates reconstruct each other perfectly and can mask anomalies."
+        )
 
     return FeaturePreparation(
         frame=prepared,
@@ -210,7 +217,12 @@ def _deduplicate_columns(frame: pd.DataFrame) -> pd.DataFrame:
 def _select_by_variance(frame: pd.DataFrame, max_features: int) -> pd.DataFrame:
     if max_features <= 0 or frame.shape[1] <= max_features:
         return frame
-    standardized = (frame - frame.mean(axis=0)) / frame.std(axis=0, ddof=0).replace(0, 1)
-    variances = standardized.var(axis=0, ddof=0).fillna(0)
-    selected = variances.sort_values(ascending=False).head(max_features).index.tolist()
+    # Standardizing first would make every non-constant column's variance exactly 1,
+    # so rank dispersion on min-max scaled values instead: scale-free, and columns
+    # whose mass concentrates near one end of their range score lower.
+    col_min = frame.min(axis=0)
+    col_range = (frame.max(axis=0) - col_min).replace(0, 1)
+    normalized = (frame - col_min) / col_range
+    dispersion = normalized.var(axis=0, ddof=0).fillna(0)
+    selected = dispersion.sort_values(ascending=False).head(max_features).index.tolist()
     return frame.loc[:, selected]
